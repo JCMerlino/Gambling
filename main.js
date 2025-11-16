@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const betOptionsInput = document.getElementById('betOptions');
   const leaveBtn = document.getElementById('leaveBtn');
   const createBetBtn = document.getElementById('createBetBtn');
-  console.log("createBetBtn =", createBetBtn);
+  
 
 
   let displayName = '';
@@ -56,7 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       await signInAnonymously(auth);
-      console.log('signInAnonymously called');
     } catch (e) {
       console.error('Auth error:', e);
       alert('Login failed: ' + e.message);
@@ -69,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
   onAuthStateChanged(auth, async (user) => {
     if (user) {
       currentUser = user;
-      console.log('Auth state: user', user.uid);
+      
 
       // Write user info (so rules that check /users/{uid}/name will see it)
       try {
@@ -95,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Prefer a server-controlled flag `isAdmin` in the user record.
       // Fallback to name === 'admin' only for local/testing convenience.
       isAdminLocal = Boolean(userSnap.val().isAdmin) || storedName.toLowerCase() === 'admin';
-      console.log('Is admin:', isAdminLocal);
+      
       // Expose admin status in UI for easier debugging
       if (adminPanel) adminPanel.dataset.isAdmin = isAdminLocal ? 'true' : 'false';
 
@@ -128,7 +127,6 @@ document.addEventListener('DOMContentLoaded', () => {
           try {
             await signOut(auth);
             displayName = '';
-            console.log('Signed out');
           } catch (e) {
             console.error('Sign-out failed', e);
             alert('Failed to sign out: ' + (e.message || e));
@@ -155,7 +153,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Admin: create bet ---
   if (createBetBtn) {
     createBetBtn.addEventListener('click', async () => {
-      console.log('createBetBtn clicked — isAdminLocal=', isAdminLocal, 'betNameInput=', !!betNameInput, 'betOptionsInput=', !!betOptionsInput);
       if (!isAdminLocal) return alert('Only admin can create bets. (Not admin)');
       const question = (betNameInput?.value || '').trim();
       const options = (betOptionsInput?.value || '').split(',').map(o => o.trim()).filter(Boolean);
@@ -172,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         betNameInput.value = '';
         betOptionsInput.value = '';
-        console.log('Bet created', betRef.key);
+        
       } catch (e) {
         console.error('Create bet failed:', e);
         alert('Failed to create bet. Check console and rules.');
@@ -204,6 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Render bets to DOM
   function renderBets(bets) {
     betListEl.innerHTML = '';
+    const renderedBetIds = new Set();
     Object.entries(bets).sort((a,b)=> (b[1].createdAt||0)-(a[1].createdAt||0)).forEach(([betId, bet]) => {
       const div = document.createElement('div');
       div.className = 'bet';
@@ -258,12 +256,30 @@ document.addEventListener('DOMContentLoaded', () => {
         renderSettlementSummary(betId, bet, placeholder);
       }
 
+      // Live tracker: show counts and expected returns per option
+      const tracker = document.createElement('div');
+      tracker.className = 'live-tracker loading';
+      tracker.textContent = 'Loading live tracker...';
+      div.appendChild(tracker);
+      renderLiveTracker(betId, bet, tracker);
+
+      renderedBetIds.add(betId);
       betListEl.appendChild(div);
     });
+
+    // Clean up any tracker listeners for bets that no longer exist
+    for (const key of Array.from(_trackerListeners.keys())) {
+      if (!renderedBetIds.has(key)) {
+        try { const unsub = _trackerListeners.get(key); if (typeof unsub === 'function') unsub(); } catch(_) {}
+        _trackerListeners.delete(key);
+      }
+    }
   }
 
   // Render settlement summary: show pot, stakes by option, winners' payouts
   const _settlementListeners = new Map();
+  // Live trackers for open bets
+  const _trackerListeners = new Map();
   function renderSettlementSummary(betId, bet, holderEl) {
     // Use a realtime listener so summary updates as betResults change.
     try {
@@ -351,6 +367,76 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Render live tracker for a bet: counts per option, total staked per option,
+  // and the current expected return per $1 if that option wins (pot / winnersTotal).
+  function renderLiveTracker(betId, bet, holderEl) {
+    try {
+      if (_trackerListeners.has(betId)) return; // already listening
+
+      const resultsRef = ref(db, `betResults/${betId}`);
+      const unsubscribe = onValue(resultsRef, (snap) => {
+        try {
+          const allResults = snap.exists() ? snap.val() : null;
+          if (!allResults) {
+            holderEl.textContent = 'No bets yet for this event.';
+            holderEl.className = 'live-tracker empty';
+            return;
+          }
+
+          // Aggregate
+          let pot = 0;
+          const stakesByOption = {};
+          const countByOption = {};
+          for (const [uid, res] of Object.entries(allResults)) {
+            const amt = Number(res.amount) || 0;
+            const opt = Number(res.option);
+            pot += amt;
+            stakesByOption[opt] = (stakesByOption[opt] || 0) + amt;
+            countByOption[opt] = (countByOption[opt] || 0) + 1;
+          }
+
+          // Build UI
+          holderEl.innerHTML = '';
+          holderEl.className = 'live-tracker';
+          const potDiv = document.createElement('div');
+          potDiv.className = 'pot-info';
+          potDiv.innerHTML = `<strong>Pot:</strong> $${pot}`;
+          holderEl.appendChild(potDiv);
+
+          for (let i = 0; i < (bet.options || []).length; i++) {
+            const optDiv = document.createElement('div');
+            optDiv.className = 'tracker-option';
+            const label = bet.options[i] || `Option ${i}`;
+            const totalStaked = stakesByOption[i] || 0;
+            const bettors = countByOption[i] || 0;
+
+            // Expected return per $1 if this option wins (includes original stake)
+            let perUnitReturn = 'N/A';
+            if (totalStaked > 0) {
+              perUnitReturn = (pot / totalStaked).toFixed(2);
+            }
+
+            optDiv.innerHTML = `<strong>${escapeHtml(label)}</strong> — ${bettors} bettors — Staked: $${totalStaked} — Return per $1 if wins: ${perUnitReturn === 'N/A' ? 'N/A' : '$' + perUnitReturn}`;
+            holderEl.appendChild(optDiv);
+          }
+        } catch (err) {
+          console.error('live tracker onValue handler error', err);
+          holderEl.textContent = 'Unable to load live tracker (check DB rules/permissions).';
+          holderEl.className = 'live-tracker error';
+        }
+      }, (err) => {
+        console.error('betResults tracker onValue error', err);
+        holderEl.textContent = 'Unable to load live tracker (check DB rules/permissions).';
+        holderEl.className = 'live-tracker error';
+      });
+
+      _trackerListeners.set(betId, unsubscribe);
+    } catch (e) {
+      console.error('renderLiveTracker error', e);
+      try { holderEl.textContent = 'Unable to load live tracker (check DB rules/permissions).'; holderEl.className = 'live-tracker error'; } catch(_) {}
+    }
+  }
+
   // --- Place bet (users write their own betResults and balance) ---
   async function placeBet(betId, optionIdx) {
     if (!currentUser) return alert('Not signed in');
@@ -376,7 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return c - amount;
       });
 
-      console.log('Placed bet', betId, optionIdx, amount);
+      
     } catch (e) {
       console.error('placeBet error', e);
       alert('Failed to place bet: ' + (e.message || e));
@@ -389,7 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       // Mark bet as settled and record winningOption in a single update
       await update(ref(db, `bets/${betId}`), { status: 'settled', winningOption });
-      console.log('Bet settled', betId, winningOption);
+      
     } catch (e) {
       console.error('settleBet error', e);
       alert('Failed to settle bet: ' + (e.message || e));
@@ -401,7 +487,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!isAdminLocal) return alert('Only admin can close bets');
     try {
       await update(ref(db, `bets/${betId}`), { status: 'closed' });
-      console.log('Bet closed', betId);
+      
     } catch (e) {
       console.error('closeBet error', e);
       alert('Failed to close bet: ' + (e.message || e));
