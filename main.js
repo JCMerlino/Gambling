@@ -120,7 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isAdminLocal && adminPanel && createBetBtn) {
           adminPanel.style.display = 'block';
           createBetBtn.disabled = false;
-          deleteSettledBtn.style.display = 'block';
       }
 
       // Attach leave/sign-out handler
@@ -149,7 +148,6 @@ document.addEventListener('DOMContentLoaded', () => {
       mainScreen.style.display = 'none';
       if (adminPanel) adminPanel.style.display = 'none';
       if (createBetBtn) createBetBtn.disabled = true;
-      deleteSettledBtn.style.display = 'none';
     }
   });
 
