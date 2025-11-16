@@ -7,7 +7,7 @@
 
 import { firebaseConfig } from './firebase-config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
   getDatabase, ref, set, get, push, onValue, update, runTransaction
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
@@ -28,8 +28,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const welcomeEl = document.getElementById('welcome');
   const adminPanel = document.getElementById('admin-panel');
   const betListEl = document.getElementById('bet-list');
-  const newBetQuestion = document.getElementById('new-bet-question');
-  const newBetOptions = document.getElementById('new-bet-options');
+  const betNameInput = document.getElementById('betName');
+  const betOptionsInput = document.getElementById('betOptions');
+  const leaveBtn = document.getElementById('leaveBtn');
   const createBetBtn = document.getElementById('createBetBtn');
   console.log("createBetBtn =", createBetBtn);
 
@@ -85,9 +86,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Determine admin status from the stored name (safer)
       const storedName = (userSnap.val().name || '').toString();
-      isAdminLocal = storedName.toLowerCase() === 'admin';
+      isAdminLocal = Boolean(userSnap.val().isAdmin) || storedName.toLowerCase() === 'admin';
       console.log('Is admin:', isAdminLocal);
 
       // Ensure balance exists
@@ -113,6 +113,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (createBetBtn) createBetBtn.disabled = false;
       }
 
+      // Attach leave/sign-out handler
+      if (leaveBtn) {
+        leaveBtn.addEventListener('click', async () => {
+          try {
+            await signOut(auth);
+            displayName = '';
+            console.log('Signed out');
+          } catch (e) {
+            console.error('Sign-out failed', e);
+            alert('Failed to sign out: ' + (e.message || e));
+          }
+        });
+      }
+
       // Start listeners AFTER user is set up
       listenBets();
       listenBalanceAndApplyPendingPayouts();
@@ -131,15 +145,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Admin: create bet ---
   if (createBetBtn) {
     createBetBtn.addEventListener('click', async () => {
-      console.log("CLICK HANDLER FIRED");   // <--- ADD THIS
       if (!isAdminLocal) return alert('Only admin can create bets.');
-      const question = (newBetQuestion?.value || '').trim();
-      const options = (newBetOptions?.value || '').split(',').map(o => o.trim()).filter(Boolean);
+      const question = (betNameInput?.value || '').trim();
+      const options = (betOptionsInput?.value || '').split(',').map(o => o.trim()).filter(Boolean);
       if (!question || options.length < 2) return alert('Enter a question and at least 2 options');
 
       try {
         const betRef = push(ref(db, 'bets'));
-        console.log("Pushing bet to path:", betRef.toString());
         await set(betRef, {
           question,
           options,
@@ -147,8 +159,8 @@ document.addEventListener('DOMContentLoaded', () => {
           winningOption: null,
           createdAt: Date.now()
         });
-        newBetQuestion.value = '';
-        newBetOptions.value = '';
+        betNameInput.value = '';
+        betOptionsInput.value = '';
         console.log('Bet created', betRef.key);
       } catch (e) {
         console.error('Create bet failed:', e);
