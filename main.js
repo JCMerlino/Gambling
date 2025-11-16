@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const betOptionsInput = document.getElementById('betOptions');
   const leaveBtn = document.getElementById('leaveBtn');
   const createBetBtn = document.getElementById('createBetBtn');
+  const deleteSettledBtn = document.getElementById('deleteSettledBtn');
   
 
 
@@ -180,40 +181,36 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Admin: delete all settled bets ---
-  const deleteSettledBtn = document.createElement('button');
-  deleteSettledBtn.id = 'deleteSettledBtn';
-  deleteSettledBtn.textContent = 'Delete All Settled Bets';
-  deleteSettledBtn.style.display = 'none';
-  if (adminPanel) adminPanel.appendChild(deleteSettledBtn);
+  if (deleteSettledBtn) {
+    deleteSettledBtn.addEventListener('click', async () => {
+      if (!isAdminLocal) return alert('Only admin can delete bets');
+      if (!confirm('Delete all settled bets? This cannot be undone.')) return;
 
-  deleteSettledBtn.addEventListener('click', async () => {
-    if (!isAdminLocal) return alert('Only admin can delete bets');
-    if (!confirm('Delete all settled bets? This cannot be undone.')) return;
-
-    try {
-      const betsRef = ref(db, 'bets');
-      const betsSnap = await get(betsRef);
-      if (!betsSnap.exists()) {
-        alert('No bets to delete');
-        return;
-      }
-
-      const bets = betsSnap.val();
-      let deletedCount = 0;
-
-      for (const [betId, bet] of Object.entries(bets)) {
-        if (bet && bet.status === 'settled') {
-          await set(ref(db, `bets/${betId}`), null); // delete the bet
-          deletedCount++;
+      try {
+        const betsRef = ref(db, 'bets');
+        const betsSnap = await get(betsRef);
+        if (!betsSnap.exists()) {
+          alert('No bets to delete');
+          return;
         }
-      }
 
-      alert(`Deleted ${deletedCount} settled bet(s).`);
-    } catch (e) {
-      console.error('Delete settled bets failed:', e);
-      alert('Failed to delete settled bets: ' + (e.message || e));
-    }
-  });
+        const bets = betsSnap.val();
+        let deletedCount = 0;
+
+        for (const [betId, bet] of Object.entries(bets)) {
+          if (bet && bet.status === 'settled') {
+            await set(ref(db, `bets/${betId}`), null); // delete the bet
+            deletedCount++;
+          }
+        }
+
+        alert(`Deleted ${deletedCount} settled bet(s).`);
+      } catch (e) {
+        console.error('Delete settled bets failed:', e);
+        alert('Failed to delete settled bets: ' + (e.message || e));
+      }
+    });
+  }
 
   // --- Listen to bets (real-time, everyone) ---
   let betsListenerAttached = false;
