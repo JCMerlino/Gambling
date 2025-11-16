@@ -2,14 +2,14 @@
 import { firebaseConfig } from './firebase-config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-import { getDatabase, ref, set, get, push, onValue } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+import { getDatabase, ref, set, get, push, onValue, update } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-// DOM
+// DOM elements
 const joinBtn = document.getElementById('joinBtn');
 const playerNameInput = document.getElementById('playerName');
 const joinScreen = document.getElementById('join-screen');
@@ -24,37 +24,47 @@ const createBetBtn = document.getElementById('create-bet-btn');
 let displayName = '';
 let currentUser = null;
 
-// --- Join button ---
+// --- Join Button ---
 joinBtn.addEventListener('click', async () => {
     displayName = playerNameInput.value.trim();
     if (!displayName) return alert('Enter a name');
 
-    try { await signInAnonymously(auth); } 
-    catch (e) { console.error(e); alert('Login failed: ' + e.message); }
+    try {
+        await signInAnonymously(auth);
+    } catch (e) {
+        console.error('Auth error:', e);
+        alert('Login failed: ' + e.message);
+    }
 });
 
 // --- Auth state ---
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        if (!displayName) displayName = 'Anonymous';
 
-        // Save user info
-        await set(ref(db, 'users/' + user.uid), { uid: user.uid, name: displayName, joinedAt: Date.now() });
+        // Save user info securely
+        await set(ref(db, 'users/' + user.uid), {
+            uid: user.uid,
+            name: displayName,
+            joinedAt: Date.now()
+        });
+
         const balanceRef = ref(db, 'balances/' + user.uid);
         const balanceSnap = await get(balanceRef);
         if (!balanceSnap.exists()) await set(balanceRef, 1000);
 
-        // UI
+        // Show UI
         joinScreen.style.display = 'none';
         mainScreen.style.display = 'block';
         welcomeEl.textContent = `${displayName} (Balance: ${balanceSnap.exists() ? balanceSnap.val() : 1000})`;
 
+        // Show admin panel if admin
         if (displayName.toLowerCase() === 'admin') adminPanel.style.display = 'block';
 
         listenBets();
         listenBalances();
     } else {
+        // Logged out
         joinScreen.style.display = 'block';
         mainScreen.style.display = 'none';
         currentUser = null;
@@ -63,6 +73,8 @@ onAuthStateChanged(auth, async (user) => {
 
 // --- Admin creates bet ---
 createBetBtn.addEventListener('click', async () => {
+    if (displayName.toLowerCase() !== 'admin') return;
+
     const question = newBetQuestion.value.trim();
     const options = newBetOptions.value.split(',').map(o => o.trim()).filter(o => o);
     if (!question || options.length < 2) return alert('Enter a question and at least 2 options');
@@ -93,16 +105,16 @@ function listenBets() {
             div.className = 'bet';
             div.innerHTML = `<strong>${bet.question}</strong> (${bet.status})`;
 
-            // options
+            // User betting buttons
             bet.options.forEach((opt, idx) => {
                 const btn = document.createElement('button');
-                btn.textContent = `${opt}`;
+                btn.textContent = opt;
                 btn.disabled = bet.status !== 'open' || displayName.toLowerCase() === 'admin';
                 btn.addEventListener('click', () => placeBet(betId, idx));
                 div.appendChild(btn);
             });
 
-            // admin settle buttons
+            // Admin settle buttons
             if (displayName.toLowerCase() === 'admin' && bet.status === 'open') {
                 bet.options.forEach((opt, idx) => {
                     const settleBtn = document.createElement('button');
@@ -121,18 +133,26 @@ function listenBets() {
 async function placeBet(betId, optionIdx) {
     const balanceSnap = await get(ref(db, 'balances/' + currentUser.uid));
     const balance = balanceSnap.val();
-    const amount = 100; // fixed bet for demo
+    const amount = 100; // demo fixed bet
     if (balance < amount) return alert('Not enough balance');
 
-    await set(ref(db, `betResults/${betId}/${currentUser.uid}`), { option: optionIdx, amount });
+    // Write user's bet securely
+    await set(ref(db, `betResults/${betId}/${currentUser.uid}`), {
+        option: optionIdx,
+        amount
+    });
+
     await set(ref(db, 'balances/' + currentUser.uid), balance - amount);
 }
 
-// --- Settle a bet ---
+// --- Settle bet (admin only) ---
 async function settleBet(betId, winningOption) {
-    const betRef = ref(db, 'bets/' + betId);
-    await set(ref(db, `bets/${betId}/status`), 'settled');
-    await set(ref(db, `bets/${betId}/winningOption`), winningOption);
+    if (displayName.toLowerCase() !== 'admin') return;
+
+    await update(ref(db, `bets/${betId}`), {
+        status: 'settled',
+        winningOption
+    });
 
     const resultsSnap = await get(ref(db, `betResults/${betId}`));
     if (!resultsSnap.exists()) return;
@@ -147,7 +167,7 @@ async function settleBet(betId, winningOption) {
     }
 }
 
-// --- Listen balances ---
+// --- Listen to balance updates ---
 function listenBalances() {
     const balRef = ref(db, 'balances/' + currentUser.uid);
     onValue(balRef, (snap) => {
