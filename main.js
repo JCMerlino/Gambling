@@ -32,6 +32,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const newBetOptions = document.getElementById('new-bet-options');
   const createBetBtn = document.getElementById('createBetBtn');
 
+  console.log("createBetBtn =", createBetBtn);
+
+
   let displayName = '';
   let currentUser = null;
   let isAdminLocal = false; // determined after user record is written
