@@ -221,8 +221,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       div.appendChild(opts);
 
-      // If admin and open, show settle buttons
-      if (isAdminLocal && bet.status === 'open') {
+      // If admin and bet is open or closed, show settle buttons
+      if (isAdminLocal && (bet.status === 'open' || bet.status === 'closed')) {
         const adminControls = document.createElement('div');
         adminControls.className = 'admin-controls';
         (bet.options || []).forEach((opt, idx) => {
@@ -231,11 +231,13 @@ document.addEventListener('DOMContentLoaded', () => {
           settleBtn.addEventListener('click', () => settleBet(betId, idx));
           adminControls.appendChild(settleBtn);
         });
-        // Add a close button so admin can prevent further bets before settling
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = 'Close Betting';
-        closeBtn.addEventListener('click', () => closeBet(betId));
-        adminControls.appendChild(closeBtn);
+        // Add a close button so admin can prevent further bets before settling (only if open)
+        if (bet.status === 'open') {
+          const closeBtn = document.createElement('button');
+          closeBtn.textContent = 'Close Betting';
+          closeBtn.addEventListener('click', () => closeBet(betId));
+          adminControls.appendChild(closeBtn);
+        }
         div.appendChild(adminControls);
       }
 
