@@ -73,7 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Write user info (so rules that check /users/{uid}/name will see it)
       try {
-        await set(ref(db, `users/${user.uid}`), { uid: user.uid, name: displayName || 'Anonymous', joinedAt: Date.now() });
+        // Use update() so we don't overwrite server-controlled fields
+        // (for example `isAdmin`) that may already exist on the user record.
+        await update(ref(db, `users/${user.uid}`), { uid: user.uid, name: displayName || 'Anonymous', joinedAt: Date.now() });
       } catch (e) {
         console.error('Failed to write user record:', e);
         alert('Failed to set up user in database. Check rules.');
@@ -231,6 +233,11 @@ document.addEventListener('DOMContentLoaded', () => {
           settleBtn.addEventListener('click', () => settleBet(betId, idx));
           adminControls.appendChild(settleBtn);
         });
+        // Add a close button so admin can prevent further bets before settling
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Close Betting';
+        closeBtn.addEventListener('click', () => closeBet(betId));
+        adminControls.appendChild(closeBtn);
         div.appendChild(adminControls);
       }
 
@@ -386,6 +393,18 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.error('settleBet error', e);
       alert('Failed to settle bet: ' + (e.message || e));
+    }
+  }
+
+  // Admin: close betting so no more bets can be placed (before settling)
+  async function closeBet(betId) {
+    if (!isAdminLocal) return alert('Only admin can close bets');
+    try {
+      await update(ref(db, `bets/${betId}`), { status: 'closed' });
+      console.log('Bet closed', betId);
+    } catch (e) {
+      console.error('closeBet error', e);
+      alert('Failed to close bet: ' + (e.message || e));
     }
   }
 
