@@ -5,7 +5,7 @@ import { initializeApp } from "firebase/app";
 
 // Create a Firebase project at https://console.firebase.google.com/
 // Register your app (Web) and paste the config here. Rename this file to firebase-config.js
-export const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyA2DLlCW-X64oymcVcC42U_xFagHaIgb-U",
   authDomain: "gambling-e298c.firebaseapp.com",
   databaseURL: "https://gambling-e298c-default-rtdb.europe-west1.firebasedatabase.app/",
