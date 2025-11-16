@@ -256,64 +256,85 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Render settlement summary: show pot, stakes by option, winners' payouts
-  async function renderSettlementSummary(betId, bet, holderEl) {
-    // holderEl is a placeholder element already appended to the bet div.
+  const _settlementListeners = new Map();
+  function renderSettlementSummary(betId, bet, holderEl) {
+    // Use a realtime listener so summary updates as betResults change.
     try {
-      const allSnap = await get(ref(db, `betResults/${betId}`));
-      if (!allSnap.exists()) {
-        holderEl.textContent = 'No bets placed for this event.';
-        holderEl.className = 'settlement-summary empty';
+      // Avoid attaching multiple listeners for same betId
+      if (_settlementListeners.has(betId)) {
+        // already listening; return (listener will update holderEl)
         return;
       }
-      const allResults = allSnap.val() || {};
 
-      // Compute pot and stakes per option
-      let pot = 0;
-      const stakesByOption = {};
-      const playersByOption = {};
-      for (const [uid, res] of Object.entries(allResults)) {
-        const amt = Number(res.amount) || 0;
-        const opt = Number(res.option);
-        pot += amt;
-        stakesByOption[opt] = (stakesByOption[opt] || 0) + amt;
-        if (!playersByOption[opt]) playersByOption[opt] = [];
-        playersByOption[opt].push({ uid, amount: amt, payout: Number(res.payout) || 0 });
-      }
+      const resultsRef = ref(db, `betResults/${betId}`);
+      const unsubscribe = onValue(resultsRef, (snap) => {
+        try {
+          const allResults = snap.exists() ? snap.val() : null;
+          if (!allResults) {
+            holderEl.textContent = 'No bets placed for this event.';
+            holderEl.className = 'settlement-summary empty';
+            return;
+          }
 
-      // Clear holder and build summary inside it
-      holderEl.innerHTML = '';
-      holderEl.className = 'settlement-summary';
+          // Compute pot and stakes per option
+          let pot = 0;
+          const stakesByOption = {};
+          const playersByOption = {};
+          for (const [uid, res] of Object.entries(allResults)) {
+            const amt = Number(res.amount) || 0;
+            const opt = Number(res.option);
+            pot += amt;
+            stakesByOption[opt] = (stakesByOption[opt] || 0) + amt;
+            if (!playersByOption[opt]) playersByOption[opt] = [];
+            playersByOption[opt].push({ uid, amount: amt, payout: Number(res.payout) || 0 });
+          }
 
-      const potDiv = document.createElement('div');
-      potDiv.className = 'pot-info';
-      potDiv.innerHTML = `<strong>Pot: $${pot}</strong>`;
-      holderEl.appendChild(potDiv);
+          // Clear holder and build summary inside it
+          holderEl.innerHTML = '';
+          holderEl.className = 'settlement-summary';
 
-      // Show stakes and payouts for each option
-      for (let i = 0; i < (bet.options || []).length; i++) {
-        const optDiv = document.createElement('div');
-        optDiv.className = i === bet.winningOption ? 'option-stakes winner' : 'option-stakes';
-        const optionLabel = bet.options[i] || `Option ${i}`;
-        const totalStaked = stakesByOption[i] || 0;
-        optDiv.innerHTML = `<strong>${escapeHtml(optionLabel)}</strong>: $${totalStaked}`;
+          const potDiv = document.createElement('div');
+          potDiv.className = 'pot-info';
+          potDiv.innerHTML = `<strong>Pot: $${pot}</strong>`;
+          holderEl.appendChild(potDiv);
 
-        if (playersByOption[i] && playersByOption[i].length > 0) {
-          const playersList = document.createElement('div');
-          playersList.className = 'players-list';
-          playersByOption[i].forEach((p) => {
-            const pDiv = document.createElement('div');
-            pDiv.className = 'player-entry';
-            if (i === bet.winningOption && p.payout > 0) {
-              pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount} → Payout: $${p.payout}`;
-            } else {
-              pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount}`;
+          // Show stakes and payouts for each option
+          for (let i = 0; i < (bet.options || []).length; i++) {
+            const optDiv = document.createElement('div');
+            optDiv.className = i === bet.winningOption ? 'option-stakes winner' : 'option-stakes';
+            const optionLabel = bet.options[i] || `Option ${i}`;
+            const totalStaked = stakesByOption[i] || 0;
+            optDiv.innerHTML = `<strong>${escapeHtml(optionLabel)}</strong>: $${totalStaked}`;
+
+            if (playersByOption[i] && playersByOption[i].length > 0) {
+              const playersList = document.createElement('div');
+              playersList.className = 'players-list';
+              playersByOption[i].forEach((p) => {
+                const pDiv = document.createElement('div');
+                pDiv.className = 'player-entry';
+                if (i === bet.winningOption && p.payout > 0) {
+                  pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount} → Payout: $${p.payout}`;
+                } else {
+                  pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount}`;
+                }
+                playersList.appendChild(pDiv);
+              });
+              optDiv.appendChild(playersList);
             }
-            playersList.appendChild(pDiv);
-          });
-          optDiv.appendChild(playersList);
+            holderEl.appendChild(optDiv);
+          }
+        } catch (err) {
+          console.error('settlement onValue handler error', err);
+          holderEl.textContent = 'Unable to load settlement details (check DB rules/permissions).';
+          holderEl.className = 'settlement-summary error';
         }
-        holderEl.appendChild(optDiv);
-      }
+      }, (err) => {
+        console.error('betResults onValue error', err);
+        holderEl.textContent = 'Unable to load settlement details (check DB rules/permissions).';
+        holderEl.className = 'settlement-summary error';
+      });
+
+      _settlementListeners.set(betId, unsubscribe);
     } catch (e) {
       console.error('renderSettlementSummary error', e);
       try {
