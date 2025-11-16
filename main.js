@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const betListEl = document.getElementById('bet-list');
   const newBetQuestion = document.getElementById('new-bet-question');
   const newBetOptions = document.getElementById('new-bet-options');
-  const createBetBtn = document.getElementById('create-bet-btn');
+  const createBetBtn = document.getElementById('createBetBtn');
 
   let displayName = '';
   let currentUser = null;
