@@ -62,6 +62,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  
+
   // --- Auth state ---
   onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -108,10 +110,41 @@ document.addEventListener('DOMContentLoaded', () => {
       welcomeEl.textContent = `${storedName} (Balance: ...)`;
 
       // Show admin panel if admin (and enable create button)
-      if (isAdminLocal && adminPanel) {
-        adminPanel.style.display = 'block';
-        if (createBetBtn) createBetBtn.disabled = false;
+      if (isAdminLocal && adminPanel && createBetBtn) {
+          adminPanel.style.display = 'block';
+          createBetBtn.disabled = false;
+
+          // Attach click listener here, only once
+          // Remove any previous listeners to avoid duplicates
+          createBetBtn.replaceWith(createBetBtn.cloneNode(true));
+          const newCreateBtn = document.getElementById('create-bet-btn');
+
+          newCreateBtn.addEventListener('click', async () => {
+              console.log("CLICK HANDLER FIRED");   // debug
+
+              const question = newBetQuestion.value.trim();
+              const options = newBetOptions.value.split(',').map(o => o.trim()).filter(o => o);
+              if (!question || options.length < 2) return alert('Enter a question and at least 2 options');
+
+              try {
+                  const betRef = push(ref(db, 'bets'));
+                  await set(betRef, {
+                      question,
+                      options,
+                      status: 'open',
+                      winningOption: null,
+                      createdAt: Date.now()
+                  });
+                  console.log("Bet successfully written!");
+                  newBetQuestion.value = '';
+                  newBetOptions.value = '';
+              } catch (e) {
+                  console.error('Failed to create bet:', e);
+                  alert('Failed to create bet. Check console and rules.');
+              }
+          });
       }
+
 
       // Start listeners AFTER user is set up
       listenBets();
