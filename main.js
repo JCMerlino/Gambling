@@ -119,6 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isAdminLocal && adminPanel && createBetBtn) {
           adminPanel.style.display = 'block';
           createBetBtn.disabled = false;
+          deleteSettledBtn.style.display = 'block';
       }
 
       // Attach leave/sign-out handler
@@ -147,6 +148,7 @@ document.addEventListener('DOMContentLoaded', () => {
       mainScreen.style.display = 'none';
       if (adminPanel) adminPanel.style.display = 'none';
       if (createBetBtn) createBetBtn.disabled = true;
+      deleteSettledBtn.style.display = 'none';
     }
   });
 
@@ -176,6 +178,42 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // --- Admin: delete all settled bets ---
+  const deleteSettledBtn = document.createElement('button');
+  deleteSettledBtn.id = 'deleteSettledBtn';
+  deleteSettledBtn.textContent = 'Delete All Settled Bets';
+  deleteSettledBtn.style.display = 'none';
+  if (adminPanel) adminPanel.appendChild(deleteSettledBtn);
+
+  deleteSettledBtn.addEventListener('click', async () => {
+    if (!isAdminLocal) return alert('Only admin can delete bets');
+    if (!confirm('Delete all settled bets? This cannot be undone.')) return;
+
+    try {
+      const betsRef = ref(db, 'bets');
+      const betsSnap = await get(betsRef);
+      if (!betsSnap.exists()) {
+        alert('No bets to delete');
+        return;
+      }
+
+      const bets = betsSnap.val();
+      let deletedCount = 0;
+
+      for (const [betId, bet] of Object.entries(bets)) {
+        if (bet && bet.status === 'settled') {
+          await set(ref(db, `bets/${betId}`), null); // delete the bet
+          deletedCount++;
+        }
+      }
+
+      alert(`Deleted ${deletedCount} settled bet(s).`);
+    } catch (e) {
+      console.error('Delete settled bets failed:', e);
+      alert('Failed to delete settled bets: ' + (e.message || e));
+    }
+  });
 
   // --- Listen to bets (real-time, everyone) ---
   let betsListenerAttached = false;
