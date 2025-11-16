@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Admin: create bet ---
   if (createBetBtn) {
     createBetBtn.addEventListener('click', async () => {
+      console.log("CLICK HANDLER FIRED");   // <--- ADD THIS
       if (!isAdminLocal) return alert('Only admin can create bets.');
       const question = (newBetQuestion?.value || '').trim();
       const options = (newBetOptions?.value || '').split(',').map(o => o.trim()).filter(Boolean);
