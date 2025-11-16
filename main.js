@@ -302,23 +302,41 @@ document.addEventListener('DOMContentLoaded', () => {
       const myRes = mySnap.val();
       if (myRes.claimed) return; // already paid
 
+      // Read all results for this bet to compute the pot and winners' total
+      const allSnap = await get(ref(db, `betResults/${betId}`));
+      if (!allSnap.exists()) return;
+      const allResults = allSnap.val() || {};
+
+      let pot = 0;
+      let winnersTotal = 0;
+      for (const [uid, res] of Object.entries(allResults)) {
+        const amt = Number(res.amount) || 0;
+        pot += amt;
+        if (Number(res.option) === Number(bet.winningOption)) {
+          winnersTotal += amt;
+        }
+      }
+
+      // If there are no winners, nothing to distribute (house keeps pot)
+      if (winnersTotal <= 0) return;
+
+      // If this user is a winner, compute their proportional share
       if (Number(myRes.option) === Number(bet.winningOption)) {
-        const payout = Number(myRes.amount) * 2; // winner gets double stake (example)
-        const balRef = ref(db, `balances/${currentUser.uid}`);
+        // Proportional payout: pot * (userStake / winnersTotal)
+        let payout = Math.floor(pot * (Number(myRes.amount) / winnersTotal));
+        if (payout <= 0) payout = 0;
 
-        // Increase balance safely with transaction
-        await runTransaction(balRef, (current) => {
-          if (current === null) return payout; // if missing, set to payout
-          return Number(current) + payout;
-        });
+        if (payout > 0) {
+          const balRef = ref(db, `balances/${currentUser.uid}`);
+          // Increase balance safely with transaction
+          await runTransaction(balRef, (current) => {
+            if (current === null) return payout;
+            return Number(current) + payout;
+          });
+        }
 
-        // Mark as claimed (user writes their own node)
-        await update(myResultRef, { claimed: true, claimedAt: Date.now() });
-
-        console.log('Payout applied for user', currentUser.uid, 'amount', payout);
-      } else {
-        // non-winners: mark claimed to avoid reprocessing? Optionally leave it.
-        // We will not auto-claim losers so they remain visible.
+        // Mark as claimed and record the payout amount
+        await update(myResultRef, { claimed: true, claimedAt: Date.now(), payout });
       }
     } catch (e) {
       console.error('processSettlementForCurrentUser error', e);
