@@ -1,37 +1,69 @@
-import { firebaseConfig } from './firebase-config.js';
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
 import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
-import { getDatabase, ref, set, get, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+import { getDatabase, ref, set, get } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import { firebaseConfig } from './firebase-config.js';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-let currentUser = null;
-let displayName = '';
-
+const joinBtn = document.getElementById('joinBtn');
+const playerNameInput = document.getElementById('playerName');
 const joinScreen = document.getElementById('join-screen');
 const mainScreen = document.getElementById('main');
-const joinBtn = document.getElementById('joinBtn');
-const leaveBtn = document.getElementById('leaveBtn');
-const playerNameInput = document.getElementById('playerName');
 const welcomeEl = document.getElementById('welcome');
 const adminPanel = document.getElementById('admin-panel');
-const createBetBtn = document.getElementById('createBetBtn');
-const betNameInput = document.getElementById('betName');
-const betOptionsInput = document.getElementById('betOptions');
-const betsContainer = document.getElementById('bets');
+
+let displayName = '';
+let currentUser = null;
 
 joinBtn.addEventListener('click', async () => {
-  const name = playerNameInput.value.trim();
-  if (!name) return alert('Enter a display name');
-  displayName = name;
+  displayName = playerNameInput.value.trim();
+  if (!displayName) return alert('Enter a name');
+
   try {
     await signInAnonymously(auth);
-    // onAuthStateChanged will continue
+    // onAuthStateChanged will now trigger
   } catch (e) {
     console.error('Auth error', e);
-    alert('Failed to sign in anonymously: ' + e.message);
+  }
+});
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    currentUser = user;
+
+    // Make sure displayName is set
+    if (!displayName) displayName = 'Anonymous';
+
+    // Save user info in database
+    const userRef = ref(db, 'users/' + user.uid);
+    await set(userRef, {
+      uid: user.uid,
+      name: displayName,
+      joinedAt: Date.now()
+    });
+
+    // Initialize balance if not exists
+    const balanceRef = ref(db, 'balances/' + user.uid);
+    const balanceSnap = await get(balanceRef);
+    if (!balanceSnap.exists()) {
+      await set(balanceRef, 1000);
+    }
+
+    // Update DOM
+    joinScreen.style.display = 'none';
+    mainScreen.style.display = 'block';
+    welcomeEl.textContent = `${displayName} (Balance: 1000)`;
+
+    // Show admin panel if name is 'admin'
+    if (displayName.toLowerCase() === 'admin') {
+      adminPanel.style.display = 'block';
+    }
+  } else {
+    // user logged out
+    joinScreen.style.display = 'block';
+    mainScreen.style.display = 'none';
   }
 });
 
@@ -44,33 +76,6 @@ leaveBtn.addEventListener('click', async () => {
   await signOut(auth);
   location.reload();
 });
-
-onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    currentUser = user;
-    // Save name & balance
-    const userRef = ref(db, 'users/' + user.uid);
-    await set(userRef, {
-      name: displayName,
-      uid: user.uid,
-      joinedAt: Date.now()
-    });
-
-    const balRef = ref(db, 'balances/' + user.uid);
-    const snap = await get(balRef);
-    if (!snap.exists()) await set(balRef, 1000);
-
-    joinScreen.style.display = 'none';
-    mainScreen.style.display = 'block';
-    welcomeEl.textContent = displayName + ' (Balance: 1000)';
-
-    if (displayName.toLowerCase() === 'admin') adminPanel.style.display = 'block';
-
-    listenBets();
-    listenBalance();
-  }
-});
-
 
 createBetBtn.addEventListener('click', async () => {
   const name = betNameInput.value.trim();
