@@ -242,9 +242,13 @@ document.addEventListener('DOMContentLoaded', () => {
         div.appendChild(sum);
       }
 
-      // If settled, show payout summary
+      // If settled, show payout summary (add placeholder so the UI always shows status)
       if (bet.status === 'settled' && bet.winningOption != null) {
-        renderSettlementSummary(betId, bet, div);
+        const placeholder = document.createElement('div');
+        placeholder.className = 'settlement-summary loading';
+        placeholder.textContent = 'Loading settlement details...';
+        div.appendChild(placeholder);
+        renderSettlementSummary(betId, bet, placeholder);
       }
 
       betListEl.appendChild(div);
@@ -252,10 +256,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Render settlement summary: show pot, stakes by option, winners' payouts
-  async function renderSettlementSummary(betId, bet, betDiv) {
+  async function renderSettlementSummary(betId, bet, holderEl) {
+    // holderEl is a placeholder element already appended to the bet div.
     try {
       const allSnap = await get(ref(db, `betResults/${betId}`));
-      if (!allSnap.exists()) return;
+      if (!allSnap.exists()) {
+        holderEl.textContent = 'No bets placed for this event.';
+        holderEl.className = 'settlement-summary empty';
+        return;
+      }
       const allResults = allSnap.val() || {};
 
       // Compute pot and stakes per option
@@ -271,13 +280,14 @@ document.addEventListener('DOMContentLoaded', () => {
         playersByOption[opt].push({ uid, amount: amt, payout: Number(res.payout) || 0 });
       }
 
-      const summary = document.createElement('div');
-      summary.className = 'settlement-summary';
+      // Clear holder and build summary inside it
+      holderEl.innerHTML = '';
+      holderEl.className = 'settlement-summary';
 
       const potDiv = document.createElement('div');
       potDiv.className = 'pot-info';
       potDiv.innerHTML = `<strong>Pot: $${pot}</strong>`;
-      summary.appendChild(potDiv);
+      holderEl.appendChild(potDiv);
 
       // Show stakes and payouts for each option
       for (let i = 0; i < (bet.options || []).length; i++) {
@@ -302,12 +312,14 @@ document.addEventListener('DOMContentLoaded', () => {
           });
           optDiv.appendChild(playersList);
         }
-        summary.appendChild(optDiv);
+        holderEl.appendChild(optDiv);
       }
-
-      betDiv.appendChild(summary);
     } catch (e) {
       console.error('renderSettlementSummary error', e);
+      try {
+        holderEl.textContent = 'Unable to load settlement details (check DB rules/permissions).';
+        holderEl.className = 'settlement-summary error';
+      } catch (_) {}
     }
   }
 
