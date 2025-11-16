@@ -1,12 +1,8 @@
-// main.js - modular, uses Firebase CDN SDK. Paste your firebase-config.js next to this file (see firebase-config.example.js)
 import { firebaseConfig } from './firebase-config.js';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import { getDatabase, ref, set, get, onValue, push } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
 
-// Import Firebase modular SDK from CDN
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js';
-import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js';
-import { getDatabase, ref, push, set, onValue, update, get, child, remove, onDisconnect, serverTimestamp } from 'https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js';
-
-// Initialize
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
