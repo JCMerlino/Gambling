@@ -31,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const newBetQuestion = document.getElementById('new-bet-question');
   const newBetOptions = document.getElementById('new-bet-options');
   const createBetBtn = document.getElementById('createBetBtn');
-
   console.log("createBetBtn =", createBetBtn);
 
 
