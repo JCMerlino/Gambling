@@ -52,37 +52,29 @@ leaveBtn.addEventListener('click', async () => {
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     currentUser = user;
-    // save display name & default balance if not exists
+    // Save name & balance
     const userRef = ref(db, 'users/' + user.uid);
     await set(userRef, {
       name: displayName,
       uid: user.uid,
       joinedAt: Date.now()
     });
-    // ensure balance
+
     const balRef = ref(db, 'balances/' + user.uid);
     const snap = await get(balRef);
-    if (!snap.exists()) {
-      await set(balRef, 1000); // default fake money
-    }
-    // presence cleanup on disconnect
-    const presenceRef = ref(db, 'presence/' + user.uid);
-    set(presenceRef, { name: displayName, ts: Date.now() });
-    onDisconnect(presenceRef).remove();
+    if (!snap.exists()) await set(balRef, 1000);
 
     joinScreen.style.display = 'none';
     mainScreen.style.display = 'block';
-    welcomeEl.textContent = displayName + ' (Balance: ... )';
-    // Admin simple rule: if displayName is 'admin' (case-insensitive)
+    welcomeEl.textContent = displayName + ' (Balance: 1000)';
+
     if (displayName.toLowerCase() === 'admin') adminPanel.style.display = 'block';
+
     listenBets();
     listenBalance();
-  } else {
-    currentUser = null;
-    joinScreen.style.display = 'block';
-    mainScreen.style.display = 'none';
   }
 });
+
 
 createBetBtn.addEventListener('click', async () => {
   const name = betNameInput.value.trim();
