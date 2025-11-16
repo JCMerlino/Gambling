@@ -221,6 +221,30 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       div.appendChild(opts);
 
+      // Show placed bets summary (readable by everyone if rules allow)
+      if (bet.betSummary) {
+        const sum = document.createElement('div');
+        sum.className = 'summary';
+        sum.textContent = `Summary: ${bet.betSummary}`;
+        div.appendChild(sum);
+      }
+
+      // Live tracker: show counts and expected returns per option
+      const tracker = document.createElement('div');
+      tracker.className = 'live-tracker loading';
+      tracker.textContent = 'Loading live tracker...';
+      div.appendChild(tracker);
+      renderLiveTracker(betId, bet, tracker);
+
+      // If settled, show payout summary (add placeholder so the UI always shows status)
+      if (bet.status === 'settled' && bet.winningOption != null) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'settlement-summary loading';
+        placeholder.textContent = 'Loading settlement details...';
+        div.appendChild(placeholder);
+        renderSettlementSummary(betId, bet, placeholder);
+      }
+
       // If admin and bet is open or closed, show settle buttons
       if (isAdminLocal && (bet.status === 'open' || bet.status === 'closed')) {
         const adminControls = document.createElement('div');
@@ -240,30 +264,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         div.appendChild(adminControls);
       }
-
-      // Show placed bets summary (readable by everyone if rules allow)
-      if (bet.betSummary) {
-        const sum = document.createElement('div');
-        sum.className = 'summary';
-        sum.textContent = `Summary: ${bet.betSummary}`;
-        div.appendChild(sum);
-      }
-
-      // If settled, show payout summary (add placeholder so the UI always shows status)
-      if (bet.status === 'settled' && bet.winningOption != null) {
-        const placeholder = document.createElement('div');
-        placeholder.className = 'settlement-summary loading';
-        placeholder.textContent = 'Loading settlement details...';
-        div.appendChild(placeholder);
-        renderSettlementSummary(betId, bet, placeholder);
-      }
-
-      // Live tracker: show counts and expected returns per option
-      const tracker = document.createElement('div');
-      tracker.className = 'live-tracker loading';
-      tracker.textContent = 'Loading live tracker...';
-      div.appendChild(tracker);
-      renderLiveTracker(betId, bet, tracker);
 
       renderedBetIds.add(betId);
       betListEl.appendChild(div);
@@ -428,14 +428,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }, (err) => {
         console.error('betResults tracker onValue error', err);
-        holderEl.textContent = 'Unable to load live tracker (check DB rules/permissions).';
+        holderEl.textContent = `Unable to load live tracker: ${err.message || 'Check DB rules/permissions.'}`;
         holderEl.className = 'live-tracker error';
       });
 
       _trackerListeners.set(betId, unsubscribe);
     } catch (e) {
       console.error('renderLiveTracker error', e);
-      try { holderEl.textContent = 'Unable to load live tracker (check DB rules/permissions).'; holderEl.className = 'live-tracker error'; } catch(_) {}
+      try { holderEl.textContent = `Unable to load live tracker: ${e.message || 'Check DB rules/permissions.'}`; holderEl.className = 'live-tracker error'; } catch(_) {}
     }
   }
 
