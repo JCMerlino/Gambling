@@ -233,8 +233,73 @@ document.addEventListener('DOMContentLoaded', () => {
         div.appendChild(sum);
       }
 
+      // If settled, show payout summary
+      if (bet.status === 'settled' && bet.winningOption != null) {
+        renderSettlementSummary(betId, bet, div);
+      }
+
       betListEl.appendChild(div);
     });
+  }
+
+  // Render settlement summary: show pot, stakes by option, winners' payouts
+  async function renderSettlementSummary(betId, bet, betDiv) {
+    try {
+      const allSnap = await get(ref(db, `betResults/${betId}`));
+      if (!allSnap.exists()) return;
+      const allResults = allSnap.val() || {};
+
+      // Compute pot and stakes per option
+      let pot = 0;
+      const stakesByOption = {};
+      const playersByOption = {};
+      for (const [uid, res] of Object.entries(allResults)) {
+        const amt = Number(res.amount) || 0;
+        const opt = Number(res.option);
+        pot += amt;
+        stakesByOption[opt] = (stakesByOption[opt] || 0) + amt;
+        if (!playersByOption[opt]) playersByOption[opt] = [];
+        playersByOption[opt].push({ uid, amount: amt, payout: Number(res.payout) || 0 });
+      }
+
+      const summary = document.createElement('div');
+      summary.className = 'settlement-summary';
+
+      const potDiv = document.createElement('div');
+      potDiv.className = 'pot-info';
+      potDiv.innerHTML = `<strong>Pot: $${pot}</strong>`;
+      summary.appendChild(potDiv);
+
+      // Show stakes and payouts for each option
+      for (let i = 0; i < (bet.options || []).length; i++) {
+        const optDiv = document.createElement('div');
+        optDiv.className = i === bet.winningOption ? 'option-stakes winner' : 'option-stakes';
+        const optionLabel = bet.options[i] || `Option ${i}`;
+        const totalStaked = stakesByOption[i] || 0;
+        optDiv.innerHTML = `<strong>${escapeHtml(optionLabel)}</strong>: $${totalStaked}`;
+
+        if (playersByOption[i] && playersByOption[i].length > 0) {
+          const playersList = document.createElement('div');
+          playersList.className = 'players-list';
+          playersByOption[i].forEach((p) => {
+            const pDiv = document.createElement('div');
+            pDiv.className = 'player-entry';
+            if (i === bet.winningOption && p.payout > 0) {
+              pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount} → Payout: $${p.payout}`;
+            } else {
+              pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount}`;
+            }
+            playersList.appendChild(pDiv);
+          });
+          optDiv.appendChild(playersList);
+        }
+        summary.appendChild(optDiv);
+      }
+
+      betDiv.appendChild(summary);
+    } catch (e) {
+      console.error('renderSettlementSummary error', e);
+    }
   }
 
   // --- Place bet (users write their own betResults and balance) ---

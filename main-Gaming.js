@@ -7,7 +7,7 @@
 
 import { firebaseConfig } from './firebase-config.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
 import {
   getDatabase, ref, set, get, push, onValue, update, runTransaction
 } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
@@ -28,9 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const welcomeEl = document.getElementById('welcome');
   const adminPanel = document.getElementById('admin-panel');
   const betListEl = document.getElementById('bet-list');
-  const betNameInput = document.getElementById('betName');
-  const betOptionsInput = document.getElementById('betOptions');
-  const leaveBtn = document.getElementById('leaveBtn');
+  const newBetQuestion = document.getElementById('new-bet-question');
+  const newBetOptions = document.getElementById('new-bet-options');
   const createBetBtn = document.getElementById('createBetBtn');
   console.log("createBetBtn =", createBetBtn);
 
@@ -88,14 +87,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Determine admin status from the stored name or explicit DB flag (prefer the flag)
+      // Determine admin status from the stored name (safer)
       const storedName = (userSnap.val().name || '').toString();
-      // Prefer a server-controlled flag `isAdmin` in the user record.
-      // Fallback to name === 'admin' only for local/testing convenience.
-      isAdminLocal = Boolean(userSnap.val().isAdmin) || storedName.toLowerCase() === 'admin';
+      isAdminLocal = storedName.toLowerCase() === 'admin';
       console.log('Is admin:', isAdminLocal);
-      // Expose admin status in UI for easier debugging
-      if (adminPanel) adminPanel.dataset.isAdmin = isAdminLocal ? 'true' : 'false';
 
       // Ensure balance exists
       try {
@@ -118,20 +113,36 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isAdminLocal && adminPanel && createBetBtn) {
           adminPanel.style.display = 'block';
           createBetBtn.disabled = false;
-      }
 
-      // Attach leave/sign-out handler
-      if (leaveBtn) {
-        leaveBtn.addEventListener('click', async () => {
-          try {
-            await signOut(auth);
-            displayName = '';
-            console.log('Signed out');
-          } catch (e) {
-            console.error('Sign-out failed', e);
-            alert('Failed to sign out: ' + (e.message || e));
-          }
-        });
+          // Attach click listener here, only once
+          // Remove any previous listeners to avoid duplicates
+          createBetBtn.replaceWith(createBetBtn.cloneNode(true));
+          const newCreateBtn = document.getElementById('create-bet-btn');
+
+          newCreateBtn.addEventListener('click', async () => {
+              console.log("CLICK HANDLER FIRED");   // debug
+
+              const question = newBetQuestion.value.trim();
+              const options = newBetOptions.value.split(',').map(o => o.trim()).filter(o => o);
+              if (!question || options.length < 2) return alert('Enter a question and at least 2 options');
+
+              try {
+                  const betRef = push(ref(db, 'bets'));
+                  await set(betRef, {
+                      question,
+                      options,
+                      status: 'open',
+                      winningOption: null,
+                      createdAt: Date.now()
+                  });
+                  console.log("Bet successfully written!");
+                  newBetQuestion.value = '';
+                  newBetOptions.value = '';
+              } catch (e) {
+                  console.error('Failed to create bet:', e);
+                  alert('Failed to create bet. Check console and rules.');
+              }
+          });
       }
 
 
@@ -153,14 +164,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Admin: create bet ---
   if (createBetBtn) {
     createBetBtn.addEventListener('click', async () => {
-      console.log('createBetBtn clicked — isAdminLocal=', isAdminLocal, 'betNameInput=', !!betNameInput, 'betOptionsInput=', !!betOptionsInput);
-      if (!isAdminLocal) return alert('Only admin can create bets. (Not admin)');
-      const question = (betNameInput?.value || '').trim();
-      const options = (betOptionsInput?.value || '').split(',').map(o => o.trim()).filter(Boolean);
+      console.log("CLICK HANDLER FIRED");   // <--- ADD THIS
+      if (!isAdminLocal) return alert('Only admin can create bets.');
+      const question = (newBetQuestion?.value || '').trim();
+      const options = (newBetOptions?.value || '').split(',').map(o => o.trim()).filter(Boolean);
       if (!question || options.length < 2) return alert('Enter a question and at least 2 options');
 
       try {
         const betRef = push(ref(db, 'bets'));
+        console.log("Pushing bet to path:", betRef.toString());
         await set(betRef, {
           question,
           options,
@@ -168,8 +180,8 @@ document.addEventListener('DOMContentLoaded', () => {
           winningOption: null,
           createdAt: Date.now()
         });
-        betNameInput.value = '';
-        betOptionsInput.value = '';
+        newBetQuestion.value = '';
+        newBetOptions.value = '';
         console.log('Bet created', betRef.key);
       } catch (e) {
         console.error('Create bet failed:', e);
@@ -242,73 +254,8 @@ document.addEventListener('DOMContentLoaded', () => {
         div.appendChild(sum);
       }
 
-      // If settled, show payout summary
-      if (bet.status === 'settled' && bet.winningOption != null) {
-        renderSettlementSummary(betId, bet, div);
-      }
-
       betListEl.appendChild(div);
     });
-  }
-
-  // Render settlement summary: show pot, stakes by option, winners' payouts
-  async function renderSettlementSummary(betId, bet, betDiv) {
-    try {
-      const allSnap = await get(ref(db, `betResults/${betId}`));
-      if (!allSnap.exists()) return;
-      const allResults = allSnap.val() || {};
-
-      // Compute pot and stakes per option
-      let pot = 0;
-      const stakesByOption = {};
-      const playersByOption = {};
-      for (const [uid, res] of Object.entries(allResults)) {
-        const amt = Number(res.amount) || 0;
-        const opt = Number(res.option);
-        pot += amt;
-        stakesByOption[opt] = (stakesByOption[opt] || 0) + amt;
-        if (!playersByOption[opt]) playersByOption[opt] = [];
-        playersByOption[opt].push({ uid, amount: amt, payout: Number(res.payout) || 0 });
-      }
-
-      const summary = document.createElement('div');
-      summary.className = 'settlement-summary';
-
-      const potDiv = document.createElement('div');
-      potDiv.className = 'pot-info';
-      potDiv.innerHTML = `<strong>Pot: $${pot}</strong>`;
-      summary.appendChild(potDiv);
-
-      // Show stakes and payouts for each option
-      for (let i = 0; i < (bet.options || []).length; i++) {
-        const optDiv = document.createElement('div');
-        optDiv.className = i === bet.winningOption ? 'option-stakes winner' : 'option-stakes';
-        const optionLabel = bet.options[i] || `Option ${i}`;
-        const totalStaked = stakesByOption[i] || 0;
-        optDiv.innerHTML = `<strong>${escapeHtml(optionLabel)}</strong>: $${totalStaked}`;
-
-        if (playersByOption[i] && playersByOption[i].length > 0) {
-          const playersList = document.createElement('div');
-          playersList.className = 'players-list';
-          playersByOption[i].forEach((p) => {
-            const pDiv = document.createElement('div');
-            pDiv.className = 'player-entry';
-            if (i === bet.winningOption && p.payout > 0) {
-              pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount} → Payout: $${p.payout}`;
-            } else {
-              pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount}`;
-            }
-            playersList.appendChild(pDiv);
-          });
-          optDiv.appendChild(playersList);
-        }
-        summary.appendChild(optDiv);
-      }
-
-      betDiv.appendChild(summary);
-    } catch (e) {
-      console.error('renderSettlementSummary error', e);
-    }
   }
 
   // --- Place bet (users write their own betResults and balance) ---
@@ -367,41 +314,23 @@ document.addEventListener('DOMContentLoaded', () => {
       const myRes = mySnap.val();
       if (myRes.claimed) return; // already paid
 
-      // Read all results for this bet to compute the pot and winners' total
-      const allSnap = await get(ref(db, `betResults/${betId}`));
-      if (!allSnap.exists()) return;
-      const allResults = allSnap.val() || {};
-
-      let pot = 0;
-      let winnersTotal = 0;
-      for (const [uid, res] of Object.entries(allResults)) {
-        const amt = Number(res.amount) || 0;
-        pot += amt;
-        if (Number(res.option) === Number(bet.winningOption)) {
-          winnersTotal += amt;
-        }
-      }
-
-      // If there are no winners, nothing to distribute (house keeps pot)
-      if (winnersTotal <= 0) return;
-
-      // If this user is a winner, compute their proportional share
       if (Number(myRes.option) === Number(bet.winningOption)) {
-        // Proportional payout: pot * (userStake / winnersTotal)
-        let payout = Math.floor(pot * (Number(myRes.amount) / winnersTotal));
-        if (payout <= 0) payout = 0;
+        const payout = Number(myRes.amount) * 2; // winner gets double stake (example)
+        const balRef = ref(db, `balances/${currentUser.uid}`);
 
-        if (payout > 0) {
-          const balRef = ref(db, `balances/${currentUser.uid}`);
-          // Increase balance safely with transaction
-          await runTransaction(balRef, (current) => {
-            if (current === null) return payout;
-            return Number(current) + payout;
-          });
-        }
+        // Increase balance safely with transaction
+        await runTransaction(balRef, (current) => {
+          if (current === null) return payout; // if missing, set to payout
+          return Number(current) + payout;
+        });
 
-        // Mark as claimed and record the payout amount
-        await update(myResultRef, { claimed: true, claimedAt: Date.now(), payout });
+        // Mark as claimed (user writes their own node)
+        await update(myResultRef, { claimed: true, claimedAt: Date.now() });
+
+        console.log('Payout applied for user', currentUser.uid, 'amount', payout);
+      } else {
+        // non-winners: mark claimed to avoid reprocessing? Optionally leave it.
+        // We will not auto-claim losers so they remain visible.
       }
     } catch (e) {
       console.error('processSettlementForCurrentUser error', e);
