@@ -136,6 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       try {
         const betRef = push(ref(db, 'bets'));
+        console.log("Pushing bet to path:", betRef.toString());
         await set(betRef, {
           question,
           options,
