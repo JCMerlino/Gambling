@@ -639,6 +639,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const leaderboard = [];
         for (const [uid, userData] of Object.entries(users)) {
           const balance = Number(balances[uid]) || 0;
+          // Skip anonymous users
+          if (userData.name === 'Anonymous') continue;
           leaderboard.push({
             uid,
             name: userData.name || 'Unknown',
