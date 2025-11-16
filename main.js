@@ -245,8 +245,8 @@ document.addEventListener('DOMContentLoaded', () => {
         renderSettlementSummary(betId, bet, placeholder);
       }
 
-      // If admin and bet is open or closed, show settle buttons
-      if (isAdminLocal && (bet.status === 'open' || bet.status === 'closed')) {
+      // If admin and bet is open, closed, or settled, show settle buttons
+      if (isAdminLocal && (bet.status === 'open' || bet.status === 'closed' || bet.status === 'settled')) {
         const adminControls = document.createElement('div');
         adminControls.className = 'admin-controls';
         (bet.options || []).forEach((opt, idx) => {
