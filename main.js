@@ -347,40 +347,62 @@ document.addEventListener('DOMContentLoaded', () => {
             playersByOption[opt].push({ uid, amount: amt, payout: Number(res.payout) || 0 });
           }
 
-          // Clear holder and build summary inside it
-          holderEl.innerHTML = '';
-          holderEl.className = 'settlement-summary';
-
-          const potDiv = document.createElement('div');
-          potDiv.className = 'pot-info';
-          potDiv.innerHTML = `<strong>Pot: $${pot}</strong>`;
-          holderEl.appendChild(potDiv);
-
-          // Show stakes and payouts for each option
-          for (let i = 0; i < (bet.options || []).length; i++) {
-            const optDiv = document.createElement('div');
-            optDiv.className = i === bet.winningOption ? 'option-stakes winner' : 'option-stakes';
-            const optionLabel = bet.options[i] || `Option ${i}`;
-            const totalStaked = stakesByOption[i] || 0;
-            optDiv.innerHTML = `<strong>${escapeHtml(optionLabel)}</strong>: $${totalStaked}`;
-
-            if (playersByOption[i] && playersByOption[i].length > 0) {
-              const playersList = document.createElement('div');
-              playersList.className = 'players-list';
-              playersByOption[i].forEach((p) => {
-                const pDiv = document.createElement('div');
-                pDiv.className = 'player-entry';
-                if (i === bet.winningOption && p.payout > 0) {
-                  pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount} → Payout: $${p.payout}`;
-                } else {
-                  pDiv.innerHTML = `&nbsp;&nbsp;Stake: $${p.amount}`;
-                }
-                playersList.appendChild(pDiv);
-              });
-              optDiv.appendChild(playersList);
-            }
-            holderEl.appendChild(optDiv);
+          // Fetch user names for all players
+          const userNamePromises = [];
+          for (const [uid, res] of Object.entries(allResults)) {
+            userNamePromises.push(
+              get(ref(db, `users/${uid}`)).then(snap => ({
+                uid,
+                name: snap.exists() ? (snap.val().name || 'Unknown') : 'Unknown'
+              }))
+            );
           }
+
+          Promise.all(userNamePromises).then((users) => {
+            const userNameMap = {};
+            users.forEach(u => { userNameMap[u.uid] = u.name; });
+
+            // Clear holder and build summary inside it
+            holderEl.innerHTML = '';
+            holderEl.className = 'settlement-summary';
+
+            const potDiv = document.createElement('div');
+            potDiv.className = 'pot-info';
+            potDiv.innerHTML = `<strong>Pot: $${pot}</strong>`;
+            holderEl.appendChild(potDiv);
+
+            // Show stakes and payouts for each option
+            for (let i = 0; i < (bet.options || []).length; i++) {
+              const optDiv = document.createElement('div');
+              optDiv.className = i === bet.winningOption ? 'option-stakes winner' : 'option-stakes';
+              const optionLabel = bet.options[i] || `Option ${i}`;
+              const totalStaked = stakesByOption[i] || 0;
+              optDiv.innerHTML = `<strong>${escapeHtml(optionLabel)}</strong>: $${totalStaked}`;
+
+              if (playersByOption[i] && playersByOption[i].length > 0) {
+                const playersList = document.createElement('div');
+                playersList.className = 'players-list';
+                playersByOption[i].forEach((p) => {
+                  const pDiv = document.createElement('div');
+                  pDiv.className = 'player-entry';
+                  const playerName = escapeHtml(userNameMap[p.uid] || 'Unknown');
+                  if (i === bet.winningOption && p.payout > 0) {
+                    const netWin = p.payout - p.amount;
+                    pDiv.innerHTML = `&nbsp;&nbsp;${playerName}: Stake $${p.amount} → Payout $${p.payout} (Won: $${netWin})`;
+                  } else {
+                    pDiv.innerHTML = `&nbsp;&nbsp;${playerName}: Stake $${p.amount} (Lost: $${p.amount})`;
+                  }
+                  playersList.appendChild(pDiv);
+                });
+                optDiv.appendChild(playersList);
+              }
+              holderEl.appendChild(optDiv);
+            }
+          }).catch((err) => {
+            console.error('Error loading player names:', err);
+            holderEl.textContent = 'Unable to load settlement details (check DB rules/permissions).';
+            holderEl.className = 'settlement-summary error';
+          });
         } catch (err) {
           console.error('settlement onValue handler error', err);
           holderEl.textContent = 'Unable to load settlement details (check DB rules/permissions).';
@@ -445,13 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const totalStaked = stakesByOption[i] || 0;
             const bettors = countByOption[i] || 0;
 
-            // Expected return per $1 if this option wins (includes original stake)
-            let perUnitReturn = 'N/A';
-            if (totalStaked > 0) {
-              perUnitReturn = (pot / totalStaked).toFixed(2);
-            }
-
-            optDiv.innerHTML = `<strong>${escapeHtml(label)}</strong> — ${bettors} bettors — Staked: $${totalStaked} — Return per $1 if wins: ${perUnitReturn === 'N/A' ? 'N/A' : '$' + perUnitReturn}`;
+            optDiv.innerHTML = `<strong>${escapeHtml(label)}</strong> — ${bettors} bettors — Staked: $${totalStaked}`;
             holderEl.appendChild(optDiv);
           }
         } catch (err) {
