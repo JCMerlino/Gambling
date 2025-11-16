@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const leaveBtn = document.getElementById('leaveBtn');
   const createBetBtn = document.getElementById('createBetBtn');
   const deleteSettledBtn = document.getElementById('deleteSettledBtn');
+  const leaderboardEl = document.getElementById('leaderboard');
   
 
 
@@ -139,6 +140,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Start listeners AFTER user is set up
       listenBets();
       listenBalanceAndApplyPendingPayouts();
+      listenLeaderboard();
 
     } else {
       // signed out
@@ -267,6 +269,11 @@ document.addEventListener('DOMContentLoaded', () => {
       tracker.className = 'live-tracker loading';
       tracker.textContent = 'Loading live tracker...';
       div.appendChild(tracker);
+      // Unsubscribe old listener if it exists (so new holderEl gets updates)
+      if (_trackerListeners.has(betId)) {
+        try { const unsub = _trackerListeners.get(betId); if (typeof unsub === 'function') unsub(); } catch(_) {}
+        _trackerListeners.delete(betId);
+      }
       renderLiveTracker(betId, bet, tracker);
 
       // If settled, show payout summary (add placeholder so the UI always shows status)
@@ -610,6 +617,72 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Also attach bets listener (if not yet)
     // (processSettlementForCurrentUser is called from listenBets when a bet is settled)
+  }
+
+  // --- Leaderboard: show all users ranked by balance ---
+  let leaderboardListenerAttached = false;
+  function listenLeaderboard() {
+    if (leaderboardListenerAttached) return;
+    leaderboardListenerAttached = true;
+
+    // Listen to users to get names
+    const usersRef = ref(db, 'users');
+    onValue(usersRef, async (usersSnap) => {
+      const users = usersSnap.exists() ? usersSnap.val() : {};
+
+      // Now fetch all balances
+      const balancesRef = ref(db, 'balances');
+      onValue(balancesRef, (balancesSnap) => {
+        const balances = balancesSnap.exists() ? balancesSnap.val() : {};
+
+        // Combine users and balances, sort by balance descending
+        const leaderboard = [];
+        for (const [uid, userData] of Object.entries(users)) {
+          const balance = Number(balances[uid]) || 0;
+          leaderboard.push({
+            uid,
+            name: userData.name || 'Unknown',
+            balance
+          });
+        }
+
+        leaderboard.sort((a, b) => b.balance - a.balance);
+
+        // Render leaderboard
+        renderLeaderboard(leaderboard);
+      }, (err) => {
+        console.error('balances onValue error in leaderboard', err);
+      });
+    }, (err) => {
+      console.error('users onValue error in leaderboard', err);
+    });
+  }
+
+  // Render leaderboard to DOM
+  function renderLeaderboard(leaderboard) {
+    leaderboardEl.innerHTML = '';
+    if (leaderboard.length === 0) {
+      leaderboardEl.textContent = 'No players yet.';
+      return;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'leaderboard-table';
+
+    // Header
+    const headerRow = document.createElement('tr');
+    headerRow.innerHTML = '<th>Rank</th><th>Name</th><th>Balance</th>';
+    table.appendChild(headerRow);
+
+    // Rows
+    leaderboard.forEach((player, index) => {
+      const row = document.createElement('tr');
+      row.className = player.uid === currentUser?.uid ? 'leaderboard-row current-player' : 'leaderboard-row';
+      row.innerHTML = `<td>${index + 1}</td><td>${escapeHtml(player.name)}</td><td>$${player.balance}</td>`;
+      table.appendChild(row);
+    });
+
+    leaderboardEl.appendChild(table);
   }
 
   // small helper to escape HTML when rendering

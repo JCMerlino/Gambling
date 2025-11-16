@@ -49,3 +49,36 @@ body { font-family: Arial, Helvetica, sans-serif; padding: 20px; max-width:900px
 .player-entry:first-child {
   border-top: none;
 }
+
+/* Leaderboard styling */
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.leaderboard-table th {
+  background-color: #0078d4;
+  color: white;
+  padding: 12px;
+  text-align: left;
+  font-weight: bold;
+}
+
+.leaderboard-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.leaderboard-row:hover {
+  background-color: #f9f9f9;
+}
+
+.leaderboard-row.current-player {
+  background-color: #fff3cd;
+  font-weight: bold;
+}
