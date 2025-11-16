@@ -94,6 +94,8 @@ document.addEventListener('DOMContentLoaded', () => {
       // Fallback to name === 'admin' only for local/testing convenience.
       isAdminLocal = Boolean(userSnap.val().isAdmin) || storedName.toLowerCase() === 'admin';
       console.log('Is admin:', isAdminLocal);
+      // Expose admin status in UI for easier debugging
+      if (adminPanel) adminPanel.dataset.isAdmin = isAdminLocal ? 'true' : 'false';
 
       // Ensure balance exists
       try {
@@ -151,7 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- Admin: create bet ---
   if (createBetBtn) {
     createBetBtn.addEventListener('click', async () => {
-      if (!isAdminLocal) return alert('Only admin can create bets.');
+      console.log('createBetBtn clicked — isAdminLocal=', isAdminLocal, 'betNameInput=', !!betNameInput, 'betOptionsInput=', !!betOptionsInput);
+      if (!isAdminLocal) return alert('Only admin can create bets. (Not admin)');
       const question = (betNameInput?.value || '').trim();
       const options = (betOptionsInput?.value || '').split(',').map(o => o.trim()).filter(Boolean);
       if (!question || options.length < 2) return alert('Enter a question and at least 2 options');
