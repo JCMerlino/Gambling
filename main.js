@@ -763,7 +763,9 @@ document.addEventListener('DOMContentLoaded', () => {
           const balance = Number(balances[uid]) || 0;
           const uname = (userData.name || '').toString();
           // Skip anonymous users and admin accounts
-          if (uname.trim().toLowerCase() === 'anonymous') continue;
+          const unameNorm = uname.trim().toLowerCase();
+          if (unameNorm === 'anonymous') continue;
+          if (unameNorm === 'admin') continue;
           if (Boolean(userData.isAdmin)) continue;
           leaderboard.push({
             uid,
