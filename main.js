@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const createBetBtn = document.getElementById('createBetBtn');
   const deleteSettledBtn = document.getElementById('deleteSettledBtn');
   const leaderboardEl = document.getElementById('leaderboard');
+  const nameStatus = document.getElementById('nameStatus');
   
 
 
@@ -53,6 +54,73 @@ document.addEventListener('DOMContentLoaded', () => {
     // ignore localStorage errors
   }
 
+  // Run initial live validation if we prefilled a name
+  try { if (playerNameInput && typeof validateNameLive === 'function') validateNameLive(); } catch(_) {}
+
+  // Helper: normalize a display name for comparisons
+  function normalizeName(n) {
+    if (!n) return '';
+    return n.toString().trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  // Debounce helper
+  function debounce(fn, wait) {
+    let t = null;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), wait);
+    };
+  }
+
+  // Live validate name as user types
+  const validateNameLive = debounce(async () => {
+    try {
+      const raw = (playerNameInput.value || '').toString();
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        if (nameStatus) nameStatus.textContent = '';
+        if (joinBtn) joinBtn.disabled = false;
+        return;
+      }
+
+      const norm = normalizeName(trimmed);
+      if (norm === 'anonymous') {
+        if (nameStatus) nameStatus.textContent = 'The name "Anonymous" is not allowed.';
+        if (joinBtn) joinBtn.disabled = true;
+        return;
+      }
+
+      // Check existing users for duplicate name (case-insensitive)
+      const usersSnap = await get(ref(db, 'users'));
+      if (usersSnap.exists()) {
+        const users = usersSnap.val();
+        let taken = false;
+        for (const uid of Object.keys(users)) {
+          const existingName = (users[uid].name || '').toString();
+          if (normalizeName(existingName) === norm) { taken = true; break; }
+        }
+        if (taken) {
+          if (nameStatus) nameStatus.textContent = 'Name taken — choose another.';
+          if (joinBtn) joinBtn.disabled = true;
+          return;
+        }
+      }
+
+      if (nameStatus) nameStatus.textContent = 'Name available.';
+      if (joinBtn) joinBtn.disabled = false;
+    } catch (e) {
+      console.error('Live name validation failed', e);
+      if (nameStatus) nameStatus.textContent = '';
+      if (joinBtn) joinBtn.disabled = false;
+    }
+  }, 400);
+
+  if (playerNameInput) {
+    playerNameInput.addEventListener('input', validateNameLive);
+    // run initial validation for prefilled name
+    validateNameLive();
+  }
+
   // Defensive: ensure elements exist
   if (!joinBtn || !playerNameInput || !joinScreen || !mainScreen || !welcomeEl || !betListEl) {
     console.error('Missing required DOM elements. Check IDs in HTML.');
@@ -65,15 +133,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Join-click ---
   joinBtn.addEventListener('click', async () => {
-    displayName = playerNameInput.value.trim();
+    const rawName = (playerNameInput.value || '').toString();
+    const normalized = normalizeName(rawName);
+    displayName = rawName.trim();
     if (!displayName) return alert('Enter a name');
+    if (normalized === 'anonymous') return alert('The name "Anonymous" is not allowed.');
+    // Prevent duplicate display names: check existing users for same name
+    try {
+      const usersSnap = await get(ref(db, 'users'));
+      if (usersSnap.exists()) {
+        const users = usersSnap.val();
+        for (const uid of Object.keys(users)) {
+          const existingName = (users[uid].name || '').toString();
+          if (normalizeName(existingName) === normalized) {
+            return alert('That display name is already taken. Please choose another.');
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Name uniqueness check failed', e);
+      return alert('Unable to verify name uniqueness. Try again later.');
+    }
 
     // Persist chosen display name locally so refresh retains it
-    try {
-      localStorage.setItem('displayName', displayName);
-    } catch (e) {
-      // ignore storage errors
-    }
+    try { localStorage.setItem('displayName', displayName); } catch (e) { }
 
     try {
       await signInAnonymously(auth);
