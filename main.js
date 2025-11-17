@@ -72,11 +72,30 @@ document.addEventListener('DOMContentLoaded', () => {
       currentUser = user;
       
 
-      // Write user info (so rules that check /users/{uid}/name will see it)
+      // Write user info (do not overwrite an existing name on page refresh).
+      // If the user record already exists, only update fields that are missing
+      // or update the name when the current name is blank/'Anonymous' and
+      // the user provided a new displayName.
       try {
-        // Use update() so we don't overwrite server-controlled fields
-        // (for example `isAdmin`) that may already exist on the user record.
-        await update(ref(db, `users/${user.uid}`), { uid: user.uid, name: displayName || 'Anonymous', joinedAt: Date.now() });
+        const userRef = ref(db, `users/${user.uid}`);
+        const existingSnap = await get(userRef);
+        if (!existingSnap.exists()) {
+          // create new user record
+          await set(userRef, { uid: user.uid, name: displayName || 'Anonymous', joinedAt: Date.now() });
+        } else {
+          // merge updates: don't overwrite server flags like isAdmin
+          const existing = existingSnap.val() || {};
+          const updates = {};
+          if (!existing.uid) updates.uid = user.uid;
+          // Only set name if the caller provided one AND the stored name is empty or 'Anonymous'
+          if (displayName) {
+            const curName = (existing.name || '').toString();
+            if (!curName || curName.trim() === '' || curName.toLowerCase() === 'anonymous') {
+              updates.name = displayName;
+            }
+          }
+          if (Object.keys(updates).length > 0) await update(userRef, updates);
+        }
       } catch (e) {
         console.error('Failed to write user record:', e);
         alert('Failed to set up user in database. Check rules.');
