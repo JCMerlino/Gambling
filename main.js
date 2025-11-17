@@ -497,7 +497,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const potDiv = document.createElement('div');
             potDiv.className = 'pot-info';
-            potDiv.innerHTML = `<strong>Pot: $${pot}</strong>`;
+            potDiv.innerHTML = `<strong>Pot: ${formatCurrency(pot)}</strong>`;
             holderEl.appendChild(potDiv);
 
             // Show stakes and payouts for each option
@@ -506,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
               optDiv.className = i === bet.winningOption ? 'option-stakes winner' : 'option-stakes';
               const optionLabel = bet.options[i] || `Option ${i}`;
               const totalStaked = stakesByOption[i] || 0;
-              optDiv.innerHTML = `<strong>${escapeHtml(optionLabel)}</strong>: $${totalStaked}`;
+              optDiv.innerHTML = `<strong>${escapeHtml(optionLabel)}</strong>: ${formatCurrency(totalStaked)}`;
 
               if (playersByOption[i] && playersByOption[i].length > 0) {
                 const playersList = document.createElement('div');
@@ -517,9 +517,9 @@ document.addEventListener('DOMContentLoaded', () => {
                   const playerName = escapeHtml(userNameMap[p.uid] || 'Unknown');
                   if (i === bet.winningOption && p.payout > 0) {
                     const netWin = p.payout - p.amount;
-                    pDiv.innerHTML = `&nbsp;&nbsp;${playerName}: Stake $${p.amount} → Payout $${p.payout} (Won: $${netWin})`;
+                    pDiv.innerHTML = `&nbsp;&nbsp;${playerName}: Stake ${formatCurrency(p.amount)} → Payout ${formatCurrency(p.payout)} (Won: ${formatCurrency(netWin)})`;
                   } else {
-                    pDiv.innerHTML = `&nbsp;&nbsp;${playerName}: Stake $${p.amount} (Lost: $${p.amount})`;
+                    pDiv.innerHTML = `&nbsp;&nbsp;${playerName}: Stake ${formatCurrency(p.amount)} (Lost: ${formatCurrency(p.amount)})`;
                   }
                   playersList.appendChild(pDiv);
                 });
@@ -596,7 +596,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const totalStaked = stakesByOption[i] || 0;
             const bettors = countByOption[i] || 0;
 
-            optDiv.innerHTML = `<strong>${escapeHtml(label)}</strong> — ${bettors} bettors — Staked: $${totalStaked}`;
+            optDiv.innerHTML = `<strong>${escapeHtml(label)}</strong> — ${bettors} bettors — Staked: ${formatCurrency(totalStaked)}`;
             holderEl.appendChild(optDiv);
           }
         } catch (err) {
@@ -732,7 +732,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const balRef = ref(db, `balances/${currentUser.uid}`);
     onValue(balRef, async (snap) => {
       const val = snap.exists() ? snap.val() : 0;
-      welcomeEl.textContent = `${displayName || 'You'} (Balance: ${val})`;
+      welcomeEl.textContent = `${displayName || 'You'} (Balance: ${formatCurrency(val)})`;
     }, (err) => {
       console.error('balance onValue error', err);
     });
@@ -802,7 +802,7 @@ document.addEventListener('DOMContentLoaded', () => {
     leaderboard.forEach((player, index) => {
       const row = document.createElement('tr');
       row.className = player.uid === currentUser?.uid ? 'leaderboard-row current-player' : 'leaderboard-row';
-      row.innerHTML = `<td>${index + 1}</td><td>${escapeHtml(player.name)}</td><td>$${player.balance}</td>`;
+      row.innerHTML = `<td>${index + 1}</td><td>${escapeHtml(player.name)}</td><td>${formatCurrency(player.balance)}</td>`;
       table.appendChild(row);
     });
 
@@ -812,6 +812,16 @@ document.addEventListener('DOMContentLoaded', () => {
   // small helper to escape HTML when rendering
   function escapeHtml(str) {
     return (str+'').replace(/[&<>"']/g, (m) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]);
+  }
+
+  // Format numeric amount as Euros
+  function formatCurrency(amount) {
+    try {
+      const n = Number(amount) || 0;
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(n);
+    } catch (_) {
+      return '€' + (amount || 0);
+    }
   }
 
 });
