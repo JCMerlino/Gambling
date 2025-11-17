@@ -761,8 +761,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const leaderboard = [];
         for (const [uid, userData] of Object.entries(users)) {
           const balance = Number(balances[uid]) || 0;
-          // Skip anonymous users
-          if (userData.name === 'Anonymous') continue;
+          const uname = (userData.name || '').toString();
+          // Skip anonymous users and admin accounts
+          if (uname.trim().toLowerCase() === 'anonymous') continue;
+          if (Boolean(userData.isAdmin)) continue;
           leaderboard.push({
             uid,
             name: userData.name || 'Unknown',
