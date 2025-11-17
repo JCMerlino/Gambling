@@ -41,6 +41,18 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentUser = null;
   let isAdminLocal = false; // determined after user record is written
 
+  // Restore previously chosen display name from localStorage so refreshes
+  // repopulate the name before auth completes.
+  try {
+    const saved = localStorage.getItem('displayName');
+    if (saved) {
+      displayName = saved;
+      if (playerNameInput) playerNameInput.value = saved;
+    }
+  } catch (e) {
+    // ignore localStorage errors
+  }
+
   // Defensive: ensure elements exist
   if (!joinBtn || !playerNameInput || !joinScreen || !mainScreen || !welcomeEl || !betListEl) {
     console.error('Missing required DOM elements. Check IDs in HTML.');
@@ -55,6 +67,13 @@ document.addEventListener('DOMContentLoaded', () => {
   joinBtn.addEventListener('click', async () => {
     displayName = playerNameInput.value.trim();
     if (!displayName) return alert('Enter a name');
+
+    // Persist chosen display name locally so refresh retains it
+    try {
+      localStorage.setItem('displayName', displayName);
+    } catch (e) {
+      // ignore storage errors
+    }
 
     try {
       await signInAnonymously(auth);
@@ -148,6 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
           try {
             await signOut(auth);
             displayName = '';
+            try { localStorage.removeItem('displayName'); } catch (_) {}
           } catch (e) {
             console.error('Sign-out failed', e);
             alert('Failed to sign out: ' + (e.message || e));
