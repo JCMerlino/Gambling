@@ -404,6 +404,11 @@ document.addEventListener('DOMContentLoaded', () => {
         placeholder.className = 'settlement-summary loading';
         placeholder.textContent = 'Loading settlement details...';
         div.appendChild(placeholder);
+        // If there's an existing settlement listener for this bet, unsubscribe
+        if (_settlementListeners.has(betId)) {
+          try { const unsub = _settlementListeners.get(betId); if (typeof unsub === 'function') unsub(); } catch(_) {}
+          _settlementListeners.delete(betId);
+        }
         renderSettlementSummary(betId, bet, placeholder);
       }
 
@@ -436,6 +441,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!renderedBetIds.has(key)) {
         try { const unsub = _trackerListeners.get(key); if (typeof unsub === 'function') unsub(); } catch(_) {}
         _trackerListeners.delete(key);
+      }
+    }
+    // Clean up any settlement listeners for bets that no longer exist
+    for (const key of Array.from(_settlementListeners.keys())) {
+      if (!renderedBetIds.has(key)) {
+        try { const unsub = _settlementListeners.get(key); if (typeof unsub === 'function') unsub(); } catch(_) {}
+        _settlementListeners.delete(key);
       }
     }
   }
